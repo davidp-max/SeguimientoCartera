@@ -6,9 +6,7 @@
   <title>Mi Cartera de Inversiones</title>
   <!-- Tailwind CSS para el diseño -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js para los gráficos -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- PapaParse para leer los datos de Google Sheets -->
+  <!-- PapaParse para procesar los datos de Google Sheets -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -17,8 +15,8 @@
   <header class="border-b border-slate-800 bg-slate-950 p-4 sticky top-0 z-50">
     <div class="max-w-7xl mx-auto flex justify-between items-center">
       <h1 class="text-xl font-bold text-emerald-400">📊 Cartera de Inversión</h1>
-      <button onclick="loadPortfolioData()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg font-medium transition">
-        🔄 Actualizar Datos
+      <button onclick="loadPortfolioData()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-sm px-4 py-2 rounded-lg font-medium transition flex items-center gap-2">
+        <span>🔄</span> Actualizar Datos
       </button>
     </div>
   </header>
@@ -31,10 +29,10 @@
       <p class="mt-2 text-slate-400 text-sm">Cargando datos desde Google Sheets...</p>
     </div>
 
-    <!-- Contenido Principal (Oculto mientras carga) -->
+    <!-- Contenido Principal -->
     <div id="content" class="hidden space-y-6">
 
-      <!-- Fila de Tarjetas KPI (Dashboard) -->
+      <!-- Tarjetas KPI -->
       <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
           <p class="text-xs text-slate-400 font-medium uppercase">Total Invertido</p>
@@ -45,7 +43,7 @@
           <p id="kpi-profit" class="text-2xl font-bold mt-1">-- €</p>
         </div>
         <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
-          <p class="text-xs text-slate-400 font-medium uppercase">Total Dividendos</p>
+          <p class="text-xs text-slate-400 font-medium uppercase">Suma Dividendos Cobrados</p>
           <p id="kpi-dividends" class="text-2xl font-bold text-emerald-400 mt-1">-- €</p>
         </div>
         <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-4">
@@ -54,7 +52,7 @@
         </div>
       </section>
 
-      <!-- Tabla de Posiciones Activas (Cartera) -->
+      <!-- Tabla de Posiciones de la Cartera -->
       <section class="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
         <div class="p-4 border-b border-slate-700/50 flex justify-between items-center">
           <h2 class="font-bold text-slate-200">Posiciones de la Cartera</h2>
@@ -67,15 +65,26 @@
                 <th class="p-3">Ticker</th>
                 <th class="p-3">Nombre</th>
                 <th class="p-3">Sector</th>
-                <th class="p-3">Acciones</th>
+                <th class="p-3 text-right">Acciones</th>
                 <th class="p-3">Divisa</th>
                 <th class="p-3 text-right">Invertido (€)</th>
+                <th class="p-3 text-right">Div. Cobrados (€)</th>
+                <th class="p-3 text-right">% Yield (YoC)</th>
                 <th class="p-3 text-right">Rentabilidad</th>
               </tr>
             </thead>
             <tbody id="portfolio-table-body" class="divide-y divide-slate-700/30">
-              <!-- Carga dinámica -->
+              <!-- Carga dinámica de filas -->
             </tbody>
+            <!-- Totalizador al pie de la tabla -->
+            <tfoot class="bg-slate-900/80 font-semibold border-t border-slate-700 text-slate-200">
+              <tr>
+                <td colspan="5" class="p-3 text-right">TOTALES CARTERA:</td>
+                <td id="total-invested-sum" class="p-3 text-right font-mono text-white">-- €</td>
+                <td id="total-dividends-sum" class="p-3 text-right font-mono text-emerald-400">-- €</td>
+                <td colspan="2" class="p-3"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </section>
@@ -84,10 +93,15 @@
   </main>
 
   <script>
-    // ID extraído de la URL de tu Google Sheet
     const SPREADSHEET_ID = '1PJ9o7U5PZGt9NDAohI_CNbBAK_6PaxbAIxj8UMpd9hA';
 
-    // Función genérica para descargar pestañas en formato CSV
+    // Función auxiliar para convertir textos con formato de moneda a números
+    function parseNumber(val) {
+      if (!val) return 0;
+      const cleaned = val.toString().replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+      return parseFloat(cleaned) || 0;
+    }
+
     async function fetchSheetData(sheetName) {
       const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(sheetName)}`;
       const response = await fetch(url);
@@ -106,11 +120,10 @@
       document.getElementById('content').classList.add('hidden');
 
       try {
-        // Cargar datos de la pestaña Dashboard y Cartera
         const dashboardRows = await fetchSheetData('Dashboard');
         const carteraRows = await fetchSheetData('Cartera');
 
-        // Parsear Métricas del Dashboard (Fila 2)
+        // Parsear Métricas del Dashboard
         if (dashboardRows.length > 1) {
           const row = dashboardRows[1];
           document.getElementById('kpi-invested').innerText = (row[4] || '0') + ' EUR';
@@ -119,50 +132,66 @@
           profitElem.innerText = (row[5] || '0') + ' EUR';
           profitElem.className = `text-2xl font-bold mt-1 ${row[5] && row[5].includes('-') ? 'text-red-400' : 'text-emerald-400'}`;
 
-          document.getElementById('kpi-dividends').innerText = (row[7] || '0') + ' EUR';
-
           const returnElem = document.getElementById('kpi-return');
           returnElem.innerText = (row[14] || '0');
           returnElem.className = `text-2xl font-bold mt-1 ${row[14] && row[14].includes('-') ? 'text-red-400' : 'text-emerald-400'}`;
         }
 
-        // Renderizar Tabla de Posiciones desde 'Cartera'
+        // Renderizar Tabla de la Cartera
         const tbody = document.getElementById('portfolio-table-body');
         tbody.innerHTML = '';
 
-        // Ignorar encabezados principales y filtrar filas con datos de Tickers
         const positions = carteraRows.slice(2).filter(r => r[1] && r[1].trim() !== '' && r[1] !== 'Ticker');
         document.getElementById('position-count').innerText = `${positions.length} Posiciones`;
+
+        let totalInvestedSum = 0;
+        let totalDividendsSum = 0;
 
         positions.forEach(r => {
           const tr = document.createElement('tr');
           tr.className = 'hover:bg-slate-800/40 transition';
-          
-          const returnVal = r[19] || '0%';
+
+          const investedEur = r[12] || '0';
+          const divTotalEur = r[19] || '0';
+          const yieldOnCost = r[20] || '0%';
+          const returnVal = r[18] || '0%';
           const isNegative = returnVal.includes('-');
+
+          // Acumular sumas
+          totalInvestedSum += parseNumber(investedEur);
+          totalDividendsSum += parseNumber(divTotalEur);
 
           tr.innerHTML = `
             <td class="p-3 font-semibold text-emerald-400">${r[1] || ''}</td>
-            <td class="p-3 text-slate-200">${r[2] || ''}</td>
+            <td class="p-3 text-slate-200 max-w-xs truncate" title="${r[2] || ''}">${r[2] || ''}</td>
             <td class="p-3 text-slate-400">${r[3] || ''}</td>
-            <td class="p-3">${r[6] || '0'}</td>
-            <td class="p-3"><span class="bg-slate-700 text-xs px-2 py-0.5 rounded">${r[7] || 'EUR'}</span></td>
-            <td class="p-3 text-right font-mono">${r[13] || '0'} €</td>
+            <td class="p-3 text-right font-mono">${r[5] || '0'}</td>
+            <td class="p-3"><span class="bg-slate-700 text-xs px-2 py-0.5 rounded">${r[6] || 'EUR'}</span></td>
+            <td class="p-3 text-right font-mono">${investedEur} €</td>
+            <td class="p-3 text-right font-mono text-emerald-400 font-medium">${divTotalEur} €</td>
+            <td class="p-3 text-right font-mono text-amber-300 font-semibold">${yieldOnCost}</td>
             <td class="p-3 text-right font-semibold ${isNegative ? 'text-red-400' : 'text-emerald-400'}">${returnVal}</td>
           `;
           tbody.appendChild(tr);
         });
 
+        // Formatear e inyectar totales calculados
+        const formattedTotalDividends = totalDividendsSum.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const formattedTotalInvested = totalInvestedSum.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        document.getElementById('kpi-dividends').innerText = `${formattedTotalDividends} EUR`;
+        document.getElementById('total-dividends-sum').innerText = `${formattedTotalDividends} €`;
+        document.getElementById('total-invested-sum').innerText = `${formattedTotalInvested} €`;
+
         document.getElementById('loading').classList.add('hidden');
         document.getElementById('content').classList.remove('hidden');
 
       } catch (error) {
-        console.error('Error al cargar datos:', error);
-        alert('Ocurrió un error al cargar la información desde Google Sheets.');
+        console.error('Error al cargar los datos:', error);
+        alert('Ocurrió un error al conectar con la hoja de Google Sheets.');
       }
     }
 
-    // Inicializar carga al abrir la página
     document.addEventListener('DOMContentLoaded', loadPortfolioData);
   </script>
 </body>
